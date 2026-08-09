@@ -60,7 +60,7 @@ class CardProduto(BoxLayout):
         linha_topo.add_widget(lbl_nome)
         linha_topo.add_widget(lbl_status)
 
-        # Linha 2: Detalhes limpos (Cód / Validade / Qtd)
+        # Linha 2: Detalhes
         lbl_detalhes = Label(
             text=f"Cód: {codigo}  |  Val: {validade}  |  Qtd: {qtd}",
             font_size='12sp',
@@ -86,7 +86,6 @@ class ItaloValidadeApp(App):
         self.db_path = os.path.join(self.user_data_dir, "validade_supermercado.db")
         self.init_db()
 
-        # Layout Principal com espaçamento adequado
         main_layout = BoxLayout(orientation='vertical', padding=10, spacing=8)
 
         # --- 1. CABEÇALHO ---
@@ -116,7 +115,7 @@ class ItaloValidadeApp(App):
         header.add_widget(btn_verificar)
         main_layout.add_widget(header)
 
-        # --- 2. BARRINHA DO BANCO DE DADOS ---
+        # --- 2. BARRINHA DE AÇÕES DO BANCO ---
         db_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=36, spacing=4)
         
         btn_subir_db = Button(text="Subir DB", font_size='10sp', bold=True, background_color=(0.2, 0.4, 0.7, 1))
@@ -133,7 +132,7 @@ class ItaloValidadeApp(App):
         db_bar.add_widget(btn_backup)
         main_layout.add_widget(db_bar)
 
-        # --- 3. FORMULÁRIO ORGANIZADO ---
+        # --- 3. FORMULÁRIO ---
         form_grid = GridLayout(cols=2, size_hint_y=None, height=130, spacing=5)
 
         form_grid.add_widget(Label(text="Código:", font_size='12sp', halign='right', size_hint_x=0.35))
@@ -154,7 +153,7 @@ class ItaloValidadeApp(App):
 
         main_layout.add_widget(form_grid)
 
-        # Botão Salvar Produto
+        # Botão Salvar
         btn_salvar = Button(
             text="SALVAR PRODUTO",
             size_hint_y=None,
@@ -166,7 +165,7 @@ class ItaloValidadeApp(App):
         btn_salvar.bind(on_press=self.salvar_produto)
         main_layout.add_widget(btn_salvar)
 
-        # --- 4. LISTA DE PRODUTOS (CARDS) ---
+        # --- 4. LISTA DE PRODUTOS ---
         self.scroll = ScrollView()
         self.list_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=6)
         self.list_container.bind(minimum_height=self.list_container.setter('height'))
@@ -174,9 +173,7 @@ class ItaloValidadeApp(App):
 
         main_layout.add_widget(self.scroll)
 
-        # Carrega os produtos salvos
         self.carregar_produtos()
-
         return main_layout
 
     # --- BANCO DE DADOS ---
@@ -197,19 +194,41 @@ class ItaloValidadeApp(App):
         conn.commit()
         conn.close()
 
-    # --- NAVEGADOR DE ARQUIVOS (PARA SUBIR .DB OU .SQL) ---
-    def abrir_file_chooser(self, titulo, filtros, callback_sucesso):
-        path_inicial = "/storage/emulated/0/Download"
-        if not os.path.exists(path_inicial):
-            path_inicial = os.path.expanduser("~")
+    # --- NAVEGADOR DE ARQUIVOS COM ATALHO FACILITADO ---
+    def abrir_file_chooser(self, titulo, callback_sucesso):
+        path_downloads = "/storage/emulated/0/Download"
+        path_inicial = path_downloads if os.path.exists(path_downloads) else "/storage/emulated/0"
 
-        box = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        chooser = FileChooserListView(path=path_inicial, filters=filtros)
+        box = BoxLayout(orientation='vertical', padding=10, spacing=8)
+
+        # Atalhos Rápidos para Pastas do Celular
+        atalhos_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=35, spacing=5)
+        
+        btn_ir_downloads = Button(text="Pasta Downloads", font_size='11sp', background_color=(0.3, 0.5, 0.8, 1))
+        btn_ir_raiz = Button(text="Memória Interna", font_size='11sp', background_color=(0.4, 0.4, 0.4, 1))
+
+        atalhos_bar.add_widget(btn_ir_downloads)
+        atalhos_bar.add_widget(btn_ir_raiz)
+        box.add_widget(atalhos_bar)
+
+        # Seletor de Arquivo (Mostra todos os arquivos para facilitar a busca)
+        chooser = FileChooserListView(path=path_inicial, filters=["*.*"])
         box.add_widget(chooser)
 
+        def ir_para_downloads(instance):
+            if os.path.exists(path_downloads):
+                chooser.path = path_downloads
+
+        def ir_para_raiz(instance):
+            chooser.path = "/storage/emulated/0"
+
+        btn_ir_downloads.bind(on_press=ir_para_downloads)
+        btn_ir_raiz.bind(on_press=ir_para_raiz)
+
+        # Botões de Ação
         btn_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=10)
         btn_cancelar = Button(text="Cancelar", background_color=(0.7, 0.2, 0.2, 1))
-        btn_confirmar = Button(text="Carregar Arquivo", background_color=(0.2, 0.7, 0.3, 1), bold=True)
+        btn_confirmar = Button(text="Abrir Arquivo", background_color=(0.2, 0.7, 0.3, 1), bold=True)
 
         popup = Popup(title=titulo, content=box, size_hint=(0.95, 0.9))
 
@@ -219,7 +238,7 @@ class ItaloValidadeApp(App):
                 popup.dismiss()
                 callback_sucesso(arquivo_selecionado)
             else:
-                self.mostrar_popup("Aviso", "Selecione um arquivo na lista!")
+                self.mostrar_popup("Aviso", "Clique no arquivo que deseja selecionar!")
 
         btn_cancelar.bind(on_press=popup.dismiss)
         btn_confirmar.bind(on_press=ao_confirmar)
@@ -231,10 +250,10 @@ class ItaloValidadeApp(App):
         popup.open()
 
     def abrir_seletor_db(self, instance):
-        self.abrir_file_chooser("Selecione o arquivo .db", ["*.db", "*.sqlite"], self.importar_db_file)
+        self.abrir_file_chooser("Selecione o arquivo .db", self.importar_db_file)
 
     def abrir_seletor_sql(self, instance):
-        self.abrir_file_chooser("Selecione o arquivo .sql", ["*.sql", "*.txt"], self.importar_sql_file)
+        self.abrir_file_chooser("Selecione o arquivo .sql / .txt", self.importar_sql_file)
 
     def importar_db_file(self, caminho_arquivo):
         try:
@@ -247,8 +266,12 @@ class ItaloValidadeApp(App):
 
     def importar_sql_file(self, caminho_arquivo):
         try:
-            with open(caminho_arquivo, 'r', encoding='utf-8') as f:
-                sql_script = f.read()
+            try:
+                with open(caminho_arquivo, 'r', encoding='utf-8') as f:
+                    sql_script = f.read()
+            except UnicodeDecodeError:
+                with open(caminho_arquivo, 'r', encoding='latin-1') as f:
+                    sql_script = f.read()
 
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -259,7 +282,7 @@ class ItaloValidadeApp(App):
             self.carregar_produtos()
             self.mostrar_popup("Sucesso", "Script SQL importado com sucesso!")
         except Exception as e:
-            self.mostrar_popup("Erro", f"Falha ao executar SQL:\n{str(e)}")
+            self.mostrar_popup("Erro", f"Falha ao executar o SQL:\n{str(e)}")
 
     def gerar_backup(self, instance):
         try:
@@ -275,7 +298,7 @@ class ItaloValidadeApp(App):
         except Exception as e:
             self.mostrar_popup("Erro", f"Falha ao gerar backup:\n{str(e)}")
 
-    # --- CÁLCULO DE DIAS E ALERTAS ---
+    # --- CÁLCULOS E CARREGAMENTO ---
     def calcular_status(self, data_str):
         try:
             data_val = datetime.strptime(data_str, "%d/%m/%Y").date()
