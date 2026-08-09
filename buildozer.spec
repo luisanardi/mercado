@@ -19,7 +19,7 @@ source.include_exts = py,png,jpg,kv,atlas,db
 version = 0.1
 
 # (list) Application requirements
-requirements = python3,kivy,sqlite3
+requirements = python3,kivy
 
 # (list) Supported orientations
 orientation = portrait
@@ -31,22 +31,22 @@ fullscreen = 0
 android.permissions = INTERNET
 
 # (int) Target Android API
-android.api = 33
+android.api = 31
 
 # (int) Minimum API
 android.minapi = 21
 
 # (str) Android NDK version
-android.ndk = 25b
+android.ndk = 23b
 
-# (bool) Accept SDK license (Essencial para não dar erro)
+# (bool) Accept SDK license
 android.accept_sdk_license = True
 
 # (bool) Private storage
 android.private_storage = True
 
 # (list) Architectures to build
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 
 # (bool) Backup feature
 android.allow_backup = True
