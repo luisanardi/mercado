@@ -1,164 +1,267 @@
-import sqlite3
-import datetime
 import os
+import sqlite3
+from datetime import datetime
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.scrollview import ScrollView
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.core.window import Window
+from kivy.graphics import Color, Rectangle
 
-# Fundo escuro para a interface
-Window.clearcolor = (0.12, 0.12, 0.18, 1)
+# Define fundo escuro padronizado conforme o visual da imagem
+Window.clearcolor = (0.08, 0.09, 0.12, 1)
 
-class SistemaValidadeApp(App):
+class ItaloValidadeApp(App):
+
     def build(self):
-        self.title = "ITALO SUPERMERCADO - Validade"
-        self.db_caminho = "validade_supermercado.db"
-        self.conectar_banco()
+        # Define o caminho do banco de dados na pasta do app (Android / Desktop)
+        self.db_path = os.path.join(self.user_data_dir, "validade_supermercado.db")
+        self.init_db()
 
-        layout_principal = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        # Layout Principal (Vertical)
+        main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
 
-        # Topo / Banner 3D Simulado
-        header = Label(
-            text="[b][color=f38ba8]ITALO[/color] [color=ffffff]SUPERMERCADO[/color][/b]",
+        # ------------------- 1. CABEÇALHO -------------------
+        header = BoxLayout(orientation='horizontal', size_hint_y=None, height=50)
+        
+        lbl_title = Label(
+            text="[b]ITALO SUPERMERCADO[/b]",
             markup=True,
-            font_size='26sp',
-            size_hint_y=None,
-            height=60
+            font_size='22sp',
+            color=(1, 0.3, 0.2, 1),
+            halign='left'
         )
-        layout_principal.add_widget(header)
+        lbl_title.bind(size=lbl_title.setter('text_size'))
 
-        # Formulário de Cadastro
-        form_layout = GridLayout(cols=2, spacing=8, size_hint_y=None, height=180)
+        btn_verificar = Button(
+            text="🔔 Verificar Validades",
+            size_hint_x=None,
+            width=170,
+            background_color=(0.8, 0.2, 0.4, 1)
+        )
+        btn_verificar.bind(on_press=self.verificar_validades_alerta)
 
-        form_layout.add_widget(Label(text="Código:", font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
-        self.txt_codigo = TextInput(multiline=False, write_tab=False)
-        form_layout.add_widget(self.txt_codigo)
+        header.add_widget(lbl_title)
+        header.add_widget(btn_verificar)
+        main_layout.add_widget(header)
 
-        form_layout.add_widget(Label(text="Nome:", font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
-        self.txt_nome = TextInput(multiline=False, write_tab=False)
-        form_layout.add_widget(self.txt_nome)
+        # ------------------- 2. GERENCIADOR DE BANCO DE DADOS -------------------
+        db_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=5)
+        
+        btn_backup = Button(text="💾 Gerar Backup", background_color=(0.2, 0.5, 0.8, 1))
+        btn_backup.bind(on_press=self.gerar_backup)
+        
+        lbl_db_status = Label(
+            text=f"BD: {os.path.basename(self.db_path)}",
+            font_size='11sp',
+            color=(0.7, 0.7, 0.7, 1)
+        )
 
-        form_layout.add_widget(Label(text="Validade (DD/MM/AAAA):", font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
-        self.txt_validade = TextInput(multiline=False, write_tab=False)
-        form_layout.add_widget(self.txt_validade)
+        db_bar.add_widget(btn_backup)
+        db_bar.add_widget(lbl_db_status)
+        main_layout.add_widget(db_bar)
 
-        form_layout.add_widget(Label(text="Quantidade:", font_size='14sp', color=(0.8, 0.8, 0.8, 1)))
-        self.txt_qtd = TextInput(multiline=False, write_tab=False, text="1")
-        form_layout.add_widget(self.txt_qtd)
+        # ------------------- 3. FORMULÁRIO DE CADASTRO -------------------
+        form_box = BoxLayout(orientation='vertical', size_hint_y=None, height=130, spacing=5)
+        
+        # Linha 1: Código e Nome
+        l1 = BoxLayout(orientation='horizontal', spacing=5)
+        self.txt_codigo = TextInput(hint_text="Código", multiline=False)
+        self.txt_nome = TextInput(hint_text="Nome do Produto", multiline=False)
+        l1.add_widget(self.txt_codigo)
+        l1.add_widget(self.txt_nome)
 
-        layout_principal.add_widget(form_layout)
+        # Linha 2: Validade e Quantidade
+        l2 = BoxLayout(orientation='horizontal', spacing=5)
+        self.txt_validade = TextInput(hint_text="Validade (DD/MM/AAAA)", multiline=False)
+        self.txt_qtd = TextInput(hint_text="Qtd", multiline=False, input_filter='int')
+        l2.add_widget(self.txt_validade)
+        l2.add_widget(self.txt_qtd)
 
         # Botão Salvar
         btn_salvar = Button(
-            text="💾 Salvar Produto",
-            background_color=(0.65, 0.89, 0.63, 1),
-            color=(0.06, 0.06, 0.1, 1),
-            bold=True,
+            text="💾 Salvar / Atualizar Produto",
             size_hint_y=None,
-            height=45
+            height=40,
+            background_color=(0.2, 0.7, 0.3, 1)
         )
         btn_salvar.bind(on_press=self.salvar_produto)
-        layout_principal.add_widget(btn_salvar)
 
-        # Tabela / Lista de Produtos
-        self.tabela_layout = GridLayout(cols=1, spacing=5, size_hint_y=None)
-        self.tabela_layout.bind(minimum_height=self.tabela_layout.setter('height'))
+        form_box.add_widget(l1)
+        form_box.add_widget(l2)
+        form_box.add_widget(btn_salvar)
+        main_layout.add_widget(form_box)
 
-        scroll = ScrollView(size_hint=(1, 1))
-        scroll.add_widget(self.tabela_layout)
-        layout_principal.add_widget(scroll)
+        # ------------------- 4. TABELA DE PRODUTOS -------------------
+        # Títulos das Colunas
+        grid_header = GridLayout(cols=5, size_hint_y=None, height=30)
+        headers = ["Código", "Produto", "Validade", "Qtd", "Status"]
+        for h in headers:
+            grid_header.add_widget(Label(text=f"[b]{h}[/b]", markup=True, font_size='12sp', color=(0.8, 0.8, 0.8, 1)))
+        main_layout.add_widget(grid_header)
 
+        # Area de rolagem para os produtos
+        self.scroll = ScrollView()
+        self.grid_produtos = GridLayout(cols=1, size_hint_y=None, spacing=2)
+        self.grid_produtos.bind(minimum_height=self.grid_produtos.setter('height'))
+        self.scroll.add_widget(self.grid_produtos)
+        
+        main_layout.add_widget(self.scroll)
+
+        # Carrega os dados na inicialização
         self.carregar_produtos()
-        return layout_principal
 
-    def conectar_banco(self):
-        self.conn = sqlite3.connect(self.db_caminho)
-        self.cursor = self.conn.cursor()
-        self.cursor.execute("""
+        return main_layout
+
+    # --- BANCO DE DADOS ---
+    def get_connection(self):
+        return sqlite3.connect(self.db_path)
+
+    def init_db(self):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS produtos (
                 codigo TEXT PRIMARY KEY,
                 nome TEXT NOT NULL,
-                validade DATE NOT NULL,
-                quantidade INTEGER DEFAULT 1
+                validade TEXT NOT NULL,
+                qtd INTEGER NOT NULL
             )
-        """)
-        self.conn.commit()
+        ''')
+        conn.commit()
+        conn.close()
+
+    # --- REGRAS DE NEGÓCIO E ALERTAS ---
+    def calcular_status(self, data_str):
+        try:
+            data_val = datetime.strptime(data_str, "%d/%m/%Y").date()
+            hoje = datetime.now().date()
+            dias = (data_val - hoje).days
+
+            if dias < 0:
+                return f"🔴 VENCIDO ({abs(dias)}d)", (0.5, 0.1, 0.1, 1)
+            elif dias <= 3:
+                return f"⚠️ VENCE EM {dias} DIA(S)", (0.6, 0.5, 0.1, 1)
+            else:
+                return f"🟢 NO PRAZO", (0.1, 0.4, 0.2, 1)
+        except ValueError:
+            return "❌ DATA INVÁLIDA", (0.3, 0.3, 0.3, 1)
+
+    def carregar_produtos(self):
+        self.grid_produtos.clear_widgets()
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT codigo, nome, validade, qtd FROM produtos")
+        produtos = cursor.fetchall()
+        conn.close()
+
+        for prod in produtos:
+            codigo, nome, validade, qtd = prod
+            status_txt, cor_fundo = self.calcular_status(validade)
+
+            row = GridLayout(cols=5, size_hint_y=None, height=35, spacing=2)
+            
+            # Aplica a cor de fundo correspondente ao status (Vermelho, Laranja ou Verde)
+            with row.canvas.before:
+                Color(*cor_fundo)
+                Rectangle(pos=row.pos, size=row.size)
+            row.bind(pos=self._update_rect, size=self._update_rect)
+
+            row.add_widget(Label(text=str(codigo), font_size='11sp'))
+            row.add_widget(Label(text=str(nome), font_size='11sp'))
+            row.add_widget(Label(text=str(validade), font_size='11sp'))
+            row.add_widget(Label(text=str(qtd), font_size='11sp'))
+            row.add_widget(Label(text=status_txt, font_size='10sp', bold=True))
+
+            self.grid_produtos.add_widget(row)
+
+    def _update_rect(self, instance, value):
+        instance.canvas.before.clear()
+        with instance.canvas.before:
+            # Pega a cor calculada ou padrão
+            status_lbl = instance.children[0].text if instance.children else ""
+            if "VENCIDO" in status_lbl:
+                Color(0.4, 0.1, 0.1, 1)
+            elif "VENCE" in status_lbl:
+                Color(0.5, 0.4, 0.1, 1)
+            else:
+                Color(0.1, 0.3, 0.2, 1)
+            Rectangle(pos=instance.pos, size=instance.size)
 
     def salvar_produto(self, instance):
-        cod = self.txt_codigo.text.strip()
+        codigo = self.txt_codigo.text.strip()
         nome = self.txt_nome.text.strip()
-        val_str = self.txt_validade.text.strip()
-        qtd = self.txt_qtd.text.strip() or "1"
+        validade = self.txt_validade.text.strip()
+        qtd = self.txt_qtd.text.strip()
 
-        if not cod or not nome or not val_str:
-            self.mostrar_popup("Erro", "Preencha Código, Nome e Validade!")
+        if not (codigo and nome and validade and qtd):
+            self.mostrar_popup("Aviso", "Preencha todos os campos!")
             return
 
-        try:
-            val_dt = datetime.datetime.strptime(val_str, "%d/%m/%Y").date()
-        except ValueError:
-            self.mostrar_popup("Erro", "Formato de data inválido! Use DD/MM/AAAA")
-            return
-
-        self.cursor.execute("""
-            INSERT OR REPLACE INTO produtos (codigo, nome, validade, quantidade)
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO produtos (codigo, nome, validade, qtd)
             VALUES (?, ?, ?, ?)
-        """, (cod, nome, val_dt.strftime("%Y-%m-%d"), int(qtd)))
-        self.conn.commit()
+            ON CONFLICT(codigo) DO UPDATE SET
+                nome=excluded.nome,
+                validade=excluded.validade,
+                qtd=excluded.qtd
+        ''', (codigo, nome, validade, int(qtd)))
+        conn.commit()
+        conn.close()
 
         self.txt_codigo.text = ""
         self.txt_nome.text = ""
         self.txt_validade.text = ""
-        self.txt_qtd.text = "1"
+        self.txt_qtd.text = ""
 
         self.carregar_produtos()
-        self.mostrar_popup("Sucesso", "Produto cadastrado com sucesso!")
+        self.mostrar_popup("Sucesso", "Produto salvo com sucesso!")
 
-    def carregar_produtos(self):
-        self.tabela_layout.clear_widgets()
-        hoje = datetime.date.today()
+    def verificar_validades_alerta(self, instance):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT nome, validade FROM produtos")
+        produtos = cursor.fetchall()
+        conn.close()
 
-        self.cursor.execute("SELECT codigo, nome, validade, quantidade FROM produtos ORDER BY validade ASC")
-        produtos = self.cursor.fetchall()
+        vencidos = 0
+        vencendo = 0
 
-        if not produtos:
-            self.tabela_layout.add_widget(Label(text="Nenhum produto cadastrado.", size_hint_y=None, height=30))
-            return
+        for nome, validade in produtos:
+            try:
+                data_val = datetime.strptime(validade, "%d/%m/%Y").date()
+                dias = (data_val - datetime.now().date()).days
+                if dias < 0:
+                    vencidos += 1
+                elif dias <= 3:
+                    vencendo += 1
+            except ValueError:
+                pass
 
-        for row in produtos:
-            cod, nome, val_txt, qtd = row
-            val_dt = datetime.datetime.strptime(val_txt, "%Y-%m-%d").date()
-            dias = (val_dt - hoje).days
-            val_fmt = val_dt.strftime("%d/%m/%Y")
+        msg = f"Produtos Vencidos: {vencidos}\nProdutos Vencendo (até 3 dias): {vencendo}"
+        self.mostrar_popup("Resumo de Validades", msg)
 
-            if dias < 0:
-                cor = "[color=ff4d4d]" # Vermelho
-                status = f"🔴 VENCIDO ({abs(dias)}d)"
-            elif dias <= 2:
-                cor = "[color=ffaa00]" # Laranja
-                status = f"⚠️ VENCE EM {dias}d"
-            else:
-                cor = "[color=2ecc71]" # Verde
-                status = "🟢 NO PRAZO"
-
-            texto_item = f"{cor}[b]{nome}[/b]\nCód: {cod} | Val: {val_fmt} | Qtd: {qtd} | {status}[/color]"
-            lbl = Label(text=texto_item, markup=True, size_hint_y=None, height=50, font_size='13sp')
-            self.tabela_layout.add_widget(lbl)
+    def gerar_backup(self, instance):
+        backup_path = os.path.join(self.user_data_dir, "backup_validade.db")
+        import shutil
+        shutil.copy(self.db_path, backup_path)
+        self.mostrar_popup("Backup Criado", f"Backup salvo em:\n{backup_path}")
 
     def mostrar_popup(self, titulo, mensagem):
         box = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        box.add_widget(Label(text=mensagem))
-        btn = Button(text="OK", size_hint_y=None, height=40)
-        box.add_widget(btn)
-        
+        box.add_widget(Label(text=mensagem, halign='center'))
+        btn_fechar = Button(text="OK", size_hint_y=None, height=40)
+        box.add_widget(btn_fechar)
+
         popup = Popup(title=titulo, content=box, size_hint=(0.8, 0.4))
-        btn.bind(on_press=popup.dismiss)
+        btn_fechar.bind(on_press=popup.dismiss)
         popup.open()
 
 if __name__ == '__main__':
-    SistemaValidadeApp().run()
+    ItaloValidadeApp().run()
